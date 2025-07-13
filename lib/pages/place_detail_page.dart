@@ -479,7 +479,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
           style: const TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFF1A237E),
-        iconTheme: const IconThemeData(color: Colors.white), // flecha volver blanca
+        iconTheme: const IconThemeData(color: Colors.white), 
         actions: _isOwner
             ? [
                 IconButton(
@@ -568,7 +568,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                               );
                             },
                           ),
-                          // Flechas izquierda/derecha
+                
                           Positioned(
                             top: 0,
                             bottom: 0,
