@@ -17,13 +17,11 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
   bool _loadingImages = true;
 
   List<Map<String, dynamic>> _reviews = [];
-  Map<int, List<Map<String, dynamic>>> _replies = {};
+  Map<dynamic, List<Map<String, dynamic>>> _replies = {};
   bool _loadingReviews = true;
 
-  // Controla qué reseña está en modo responder (mostrar campo)
-  Set<int> _replyingReviewIds = {};
-
-  final Map<int, TextEditingController> _replyControllers = {};
+  Set<dynamic> _replyingReviewIds = {};
+  final Map<dynamic, TextEditingController> _replyControllers = {};
 
   @override
   void initState() {
@@ -40,16 +38,14 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
           .select('image_url')
           .eq('place_id', placeId);
 
-      if (response != null && response is List) {
+      if (response is List) {
         setState(() {
           _imageUrls = List<String>.from(response.map((e) => e['image_url']));
           _loadingImages = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _loadingImages = false;
-      });
+      setState(() => _loadingImages = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al cargar imágenes: $e')),
       );
@@ -57,10 +53,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
   }
 
   Future<void> _loadReviewsAndReplies() async {
-    setState(() {
-      _loadingReviews = true;
-    });
-
+    setState(() => _loadingReviews = true);
     final placeId = widget.place['id'];
 
     try {
@@ -71,7 +64,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
           .is_('parent_review_id', null)
           .order('created_at', ascending: false);
 
-      if (reviewsResponse != null && reviewsResponse is List) {
+      if (reviewsResponse is List) {
         _reviews = List<Map<String, dynamic>>.from(reviewsResponse);
         _replies.clear();
         _replyControllers.clear();
@@ -85,7 +78,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
               .eq('parent_review_id', reviewId)
               .order('created_at', ascending: true);
 
-          _replies[reviewId] = repliesResponse != null
+          _replies[reviewId] = repliesResponse is List
               ? List<Map<String, dynamic>>.from(repliesResponse)
               : [];
 
@@ -98,15 +91,13 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
       );
     }
 
-    setState(() {
-      _loadingReviews = false;
-    });
+    setState(() => _loadingReviews = false);
   }
 
-  Future<void> _submitReply(int reviewId) async {
+  Future<void> _submitReply(dynamic reviewId) async {
     final controller = _replyControllers[reviewId];
     final replyText = controller?.text.trim() ?? '';
-    final userId = _supabase.auth.currentUser?.id;
+    final user = _supabase.auth.currentUser;
     final placeId = widget.place['id'];
 
     if (replyText.isEmpty) {
@@ -116,7 +107,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
       return;
     }
 
-    if (userId == null) {
+    if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Debes iniciar sesión para responder')),
       );
@@ -126,10 +117,10 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
     try {
       await _supabase.from('reviews').insert({
         'site_id': placeId,
-        'user_id': userId,
+        'user_id': user.id,
         'content': replyText,
         'created_at': DateTime.now().toIso8601String(),
-        'author_name': 'Tu Nombre', // ajusta según tu lógica
+        'author_name': user.email ?? 'Usuario',
         'parent_review_id': reviewId,
         'rating': null,
       });
@@ -143,10 +134,10 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
           .order('created_at', ascending: true);
 
       setState(() {
-        _replies[reviewId] = updatedRepliesResponse != null
+        _replies[reviewId] = updatedRepliesResponse is List
             ? List<Map<String, dynamic>>.from(updatedRepliesResponse)
             : [];
-        _replyingReviewIds.remove(reviewId); // oculta campo después de enviar
+        _replyingReviewIds.remove(reviewId);
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -203,8 +194,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
             const SizedBox(height: 16),
             Text(
               place['title'] ?? '',
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(place['description'] ?? ''),
@@ -214,27 +204,24 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Reseñas',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
+                      const Text('Reseñas',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
                       if (_reviews.isEmpty)
                         const Text('No hay reseñas para este sitio.'),
                       ..._reviews.map((review) {
                         final reviewId = review['id'];
                         final repliesForReview = _replies[reviewId] ?? [];
-                        final isReplying = _replyingReviewIds.contains(reviewId);
+                        final isReplying =
+                            _replyingReviewIds.contains(reviewId);
 
                         return Card(
-                          margin:
-                              const EdgeInsets.symmetric(vertical: 8),
+                          margin: const EdgeInsets.symmetric(vertical: 8),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   review['author_name'] ?? 'Anónimo',
@@ -262,7 +249,6 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                                 ),
                                 const Divider(height: 16),
 
-                                // Respuestas
                                 ...repliesForReview.map((reply) => Padding(
                                       padding: const EdgeInsets.only(
                                           left: 12, bottom: 6),
@@ -292,7 +278,6 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                                       ),
                                     )),
 
-                                // Botón para mostrar/ocultar el campo de respuesta
                                 TextButton.icon(
                                   onPressed: () {
                                     setState(() {
@@ -304,15 +289,11 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                                     });
                                   },
                                   icon: Icon(
-                                    isReplying
-                                        ? Icons.close
-                                        : Icons.reply,
-                                  ),
+                                      isReplying ? Icons.close : Icons.reply),
                                   label: Text(
                                       isReplying ? 'Cancelar' : 'Responder'),
                                 ),
 
-                                // Campo para escribir respuesta (solo si está activo)
                                 if (isReplying) ...[
                                   TextField(
                                     controller: _replyControllers[reviewId],
@@ -327,7 +308,8 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                                   Align(
                                     alignment: Alignment.centerRight,
                                     child: ElevatedButton(
-                                      onPressed: () => _submitReply(reviewId),
+                                      onPressed: () =>
+                                          _submitReply(reviewId),
                                       child: const Text('Enviar respuesta'),
                                     ),
                                   ),

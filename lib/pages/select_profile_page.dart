@@ -28,12 +28,28 @@ class SelectProfilePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 30),
+
+              // Botón Visitante
               ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A237E),
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                style: ButtonStyle(
+                  backgroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.pressed)) {
+                      return Colors.white;
+                    }
+                    return const Color(0xFF1A237E); // Azul oscuro
+                  }),
+                  foregroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.pressed)) {
+                      return const Color(0xFF0D1361); // Texto azul oscuro al presionar
+                    }
+                    return Colors.white; // Texto normal
+                  }),
+                  minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
+                  shape: MaterialStateProperty.all(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
                 onPressed: () => _goToLogin(context, 'visitante'),
                 child: const Text(
@@ -41,13 +57,30 @@ class SelectProfilePage extends StatelessWidget {
                   style: TextStyle(fontSize: 18),
                 ),
               ),
+
               const SizedBox(height: 16),
+
+              // Botón Publicador
               ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D1361),
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                style: ButtonStyle(
+                  backgroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.pressed)) {
+                      return Colors.white;
+                    }
+                    return const Color(0xFF1A237E); // Mismo color que visitante
+                  }),
+                  foregroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.pressed)) {
+                      return const Color(0xFF0D1361);
+                    }
+                    return Colors.white;
+                  }),
+                  minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
+                  shape: MaterialStateProperty.all(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
                 onPressed: () => _goToLogin(context, 'publicador'),
                 child: const Text(

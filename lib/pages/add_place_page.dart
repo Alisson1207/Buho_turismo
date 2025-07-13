@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
-
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AddPlacePage extends StatefulWidget {
   const AddPlacePage({super.key});
@@ -16,34 +17,76 @@ class AddPlacePage extends StatefulWidget {
 
 class _AddPlacePageState extends State<AddPlacePage> {
   final SupabaseClient _supabase = Supabase.instance.client;
-
   List<XFile> _imageFiles = [];
   List<Uint8List> _webImages = [];
+  List<String> _uploadedImageUrls = [];
 
   Position? _locationData;
+  String? _googleMapsUrl;
+
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   bool _loading = false;
 
-  List<String> _uploadedImageUrls = [];
+  static const int minWidth = 1024;
+  static const int minHeight = 768;
+
+  Future<bool> _checkImageResolution(XFile file) async {
+    try {
+      Uint8List bytes = await file.readAsBytes();
+      final decodedImage = img.decodeImage(bytes);
+      if (decodedImage == null) return false;
+      return decodedImage.width >= minWidth && decodedImage.height >= minHeight;
+    } catch (e) {
+      return false;
+    }
+  }
 
   Future<void> _pickImages() async {
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage(imageQuality: 80);
 
-    if (pickedFiles.isNotEmpty) {
-      if (kIsWeb) {
-        _webImages.clear();
-        for (var file in pickedFiles) {
-          final bytes = await file.readAsBytes();
-          _webImages.add(bytes);
-        }
-      }
+    if (pickedFiles.isEmpty) return;
 
-      setState(() {
-        _imageFiles = pickedFiles;
-      });
+    if (pickedFiles.length > 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Solo puedes subir hasta 5 imágenes.')),
+      );
+      return;
     }
+
+    List<XFile> validFiles = [];
+    List<Uint8List> validWebImages = [];
+
+    for (var file in pickedFiles) {
+      bool isValid = await _checkImageResolution(file);
+      if (!isValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'La imagen ${file.name} no cumple la resolución mínima de $minWidth x $minHeight px.'),
+          ),
+        );
+        continue; // no agregues esta imagen
+      }
+      validFiles.add(file);
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        validWebImages.add(bytes);
+      }
+    }
+
+    if (validFiles.isEmpty) {
+      // Ninguna imagen válida seleccionada
+      return;
+    }
+
+    setState(() {
+      _imageFiles = validFiles;
+      if (kIsWeb) {
+        _webImages = validWebImages;
+      }
+    });
   }
 
   Future<void> _getLocation() async {
@@ -68,17 +111,41 @@ class _AddPlacePageState extends State<AddPlacePage> {
 
     if (permission == LocationPermission.deniedForever) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Permiso de ubicación denegado permanentemente.')),
+        const SnackBar(content: Text('Permiso de ubicación denegado permanentemente.')),
       );
       return;
     }
 
-    final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      _locationData = position;
-    });
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      final lat = position.latitude;
+      final lon = position.longitude;
+      final url = Uri.encodeFull('https://www.google.com/maps/search/?api=1&query=$lat,$lon');
+
+      setState(() {
+        _locationData = position;
+        _googleMapsUrl = url;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al obtener ubicación: $e')),
+      );
+    }
+  }
+
+  Future<void> _openMap() async {
+    if (_googleMapsUrl == null) return;
+    final uri = Uri.parse(_googleMapsUrl!);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir Google Maps')),
+      );
+    }
   }
 
   Future<void> _savePlace() async {
@@ -96,7 +163,7 @@ class _AddPlacePageState extends State<AddPlacePage> {
       return;
     }
 
-    if (_locationData == null) {
+    if (_locationData == null || _googleMapsUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Obtén la ubicación primero.')),
       );
@@ -114,8 +181,8 @@ class _AddPlacePageState extends State<AddPlacePage> {
       final placeInsert = await _supabase.from('places').insert({
         'title': _titleController.text,
         'description': _descriptionController.text,
-        'location':
-            'POINT(${_locationData!.longitude} ${_locationData!.latitude})',
+        'location': 'POINT(${_locationData!.longitude} ${_locationData!.latitude})',
+        'maps_url': _googleMapsUrl,
         'user_id': userId,
         'created_at': DateTime.now().toIso8601String(),
       }).select().single();
@@ -128,11 +195,9 @@ class _AddPlacePageState extends State<AddPlacePage> {
 
         await _supabase.storage
             .from('place-photos')
-            .uploadBinary(fileName, bytes,
-                fileOptions: FileOptions(contentType: 'image/jpeg'));
+            .uploadBinary(fileName, bytes, fileOptions: FileOptions(contentType: 'image/jpeg'));
 
         final publicUrl = _supabase.storage.from('place-photos').getPublicUrl(fileName);
-
 
         await _supabase.from('place_images').insert({
           'place_id': placeId,
@@ -142,12 +207,12 @@ class _AddPlacePageState extends State<AddPlacePage> {
         _uploadedImageUrls.add(publicUrl);
       }
 
-      setState(() {});
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sitio agregado correctamente.')),
       );
 
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
@@ -160,138 +225,164 @@ class _AddPlacePageState extends State<AddPlacePage> {
   }
 
   @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
-  Widget _buildUploadedImages() {
-    if (_uploadedImageUrls.isEmpty) return const SizedBox.shrink();
-
-    return SizedBox(
-      height: 150,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _uploadedImageUrls.length,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.all(8),
-            child: Image.network(
-              _uploadedImageUrls[index],
-              width: 150,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.broken_image, size: 50),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Agregar Sitio'),
+        title: const Text(
+          'Agregar Sitio',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF1A237E),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Selecciona hasta 5 imágenes (mínimo 1024 x 768 px)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
             GestureDetector(
               onTap: _pickImages,
               child: Container(
-                width: double.infinity,
-                height: 200,
+                height: 180,
                 decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
                   border: Border.all(color: Colors.blue.shade900),
                   borderRadius: BorderRadius.circular(12),
-                  color: Colors.blue.shade50,
                 ),
                 child: _imageFiles.isEmpty
                     ? const Center(
-                        child: Icon(Icons.camera_alt,
-                            size: 50, color: Colors.blue),
+                        child: Icon(Icons.add_photo_alternate, size: 50, color: Colors.blue),
                       )
                     : ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: _imageFiles.length,
                         itemBuilder: (context, index) {
                           return Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: kIsWeb
-                                ? Image.memory(_webImages[index], fit: BoxFit.cover)
-                                : Image.file(File(_imageFiles[index].path), fit: BoxFit.cover),
+                            padding: const EdgeInsets.all(8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: kIsWeb
+                                  ? Image.memory(_webImages[index],
+                                      width: 130, height: 160, fit: BoxFit.cover)
+                                  : Image.file(
+                                      File(_imageFiles[index].path),
+                                      width: 130,
+                                      height: 160,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
                           );
                         },
                       ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Título',
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.title),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
               maxLines: 4,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Descripción',
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.description),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _locationData == null
-                      ? const Text('Ubicación no obtenida')
-                      : Text(
-                          'Lat: ${_locationData!.latitude.toStringAsFixed(5)}, '
-                          'Lon: ${_locationData!.longitude.toStringAsFixed(5)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.location_on),
-                  label: const Text('Obtener ubicación'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A237E),
-                  ),
-                  onPressed: _getLocation,
-                ),
-              ],
-            ),
             const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade900),
+                color: Colors.blue.shade50,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _locationData == null
+                        ? const Text('Ubicación no obtenida',
+                            style: TextStyle(color: Colors.black54))
+                        : Text(
+                            'Lat: ${_locationData!.latitude.toStringAsFixed(5)}\nLon: ${_locationData!.longitude.toStringAsFixed(5)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.map),
+                    tooltip: 'Abrir en Google Maps',
+                    color: _googleMapsUrl != null ? Colors.blue : Colors.grey,
+                    onPressed: _googleMapsUrl != null ? _openMap : null,
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _getLocation,
+                    icon: const Icon(Icons.my_location),
+                    label: const Text('Ubicación'),
+                    style: ButtonStyle(
+                      backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(MaterialState.pressed)) return Colors.white;
+                        return const Color(0xFF1A237E);
+                      }),
+                      foregroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(MaterialState.pressed)) {
+                          return const Color(0xFF1A237E);
+                        }
+                        return Colors.white;
+                      }),
+                      shape: MaterialStateProperty.all(
+                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      padding: MaterialStateProperty.all(
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _loading ? null : _savePlace,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D1361),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                style: ButtonStyle(
+                  backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+                    if (states.contains(MaterialState.pressed)) return Colors.white;
+                    return const Color(0xFF0D1361);
+                  }),
+                  foregroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+                    if (states.contains(MaterialState.pressed)) {
+                      return const Color(0xFF0D1361);
+                    }
+                    return Colors.white;
+                  }),
+                  padding: MaterialStateProperty.all(
+                      const EdgeInsets.symmetric(vertical: 16)),
+                  shape: MaterialStateProperty.all(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
                 child: _loading
                     ? const CircularProgressIndicator(color: Colors.white)
                     : const Text(
                         'Guardar Sitio',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
               ),
             ),
-            const SizedBox(height: 24),
-            _buildUploadedImages(),
           ],
         ),
       ),
