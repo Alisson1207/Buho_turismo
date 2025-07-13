@@ -36,13 +36,13 @@ class SelectProfilePage extends StatelessWidget {
                     if (states.contains(MaterialState.pressed)) {
                       return Colors.white;
                     }
-                    return const Color(0xFF1A237E); // Azul oscuro
+                    return const Color(0xFF1A237E); 
                   }),
                   foregroundColor: MaterialStateProperty.resolveWith((states) {
                     if (states.contains(MaterialState.pressed)) {
-                      return const Color(0xFF0D1361); // Texto azul oscuro al presionar
+                      return const Color(0xFF0D1361); 
                     }
-                    return Colors.white; // Texto normal
+                    return Colors.white; 
                   }),
                   minimumSize: MaterialStateProperty.all(const Size(double.infinity, 50)),
                   shape: MaterialStateProperty.all(
@@ -60,14 +60,13 @@ class SelectProfilePage extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Botón Publicador
               ElevatedButton(
                 style: ButtonStyle(
                   backgroundColor: MaterialStateProperty.resolveWith((states) {
                     if (states.contains(MaterialState.pressed)) {
                       return Colors.white;
                     }
-                    return const Color(0xFF1A237E); // Mismo color que visitante
+                    return const Color(0xFF1A237E); 
                   }),
                   foregroundColor: MaterialStateProperty.resolveWith((states) {
                     if (states.contains(MaterialState.pressed)) {
