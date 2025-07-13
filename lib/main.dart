@@ -12,9 +12,9 @@ import 'pages/splash_screen.dart';  // importa splash
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(
-    url: 'https://pafmkpqdddhmathqpwtp.supabase.co',
+    url: '',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhZm1rcHFkZGRobWF0aHFwd3RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg4MjcyNjksImV4cCI6MjA2NDQwMzI2OX0.wKREomhWgCh1xKMTD_kUmXtLb_YxC9VBbyxGOZMpGWw',
+        '',
   );
   runApp(const MyApp());
 }
