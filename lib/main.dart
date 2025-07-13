@@ -7,7 +7,7 @@ import 'pages/home_page.dart';
 import 'pages/add_place_page.dart';
 import 'pages/place_detail_page.dart';
 import 'pages/select_profile_page.dart';
-import 'pages/splash_screen.dart';  // importa splash
+import 'pages/splash_screen.dart';  
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,9 +25,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'El Búho Turismo',
-      initialRoute: '/',  // Cambiado a splash
+      initialRoute: '/', 
       routes: {
-        '/': (_) => const SplashScreen(),  // splash screen
+        '/': (_) => const SplashScreen(),  
         '/select_profile': (_) => const SelectProfilePage(),
         '/login': (context) {
           final role = ModalRoute.of(context)?.settings.arguments as String?;
