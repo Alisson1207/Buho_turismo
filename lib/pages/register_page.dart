@@ -41,7 +41,7 @@ class _RegisterPageState extends State<RegisterPage> {
             SnackBar(content: Text('Error al guardar perfil: ${insertResponse.error!.message}')),
           );
         } else {
-          Navigator.pop(context); // Volver al login después de registrar
+          Navigator.pop(context); 
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
